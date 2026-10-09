@@ -1,3 +1,4 @@
+
 package com.famag.streamplayer;
 
 import android.app.Activity;
@@ -13,20 +14,26 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
+
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
+
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private EditText serverInput, usernameInput, passwordInput;
-    private LinearLayout root, listLayout;
+
+    private EditText serverInput;
+    private EditText usernameInput;
+    private EditText passwordInput;
+    private LinearLayout root;
+    private LinearLayout listLayout;
     private XtreamApi api;
     private boolean connecting = false;
     private int pageGeneration = 0;
-    private final Button[] loginHolder = new Button[1];
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -72,6 +79,7 @@ public class MainActivity extends Activity {
     private void showLogin() {
         setupRoot();
         root.setGravity(Gravity.CENTER_HORIZONTAL);
+
         TextView title = text("FAMAG STREAM PLAYER", 25);
         title.setGravity(Gravity.CENTER);
         root.addView(title);
@@ -89,12 +97,10 @@ public class MainActivity extends Activity {
         root.addView(usernameInput);
         root.addView(passwordInput);
 
-        Button login = button("ACCEDI", () -> login(loginHolder[0]));
-        loginHolder[0] = login;
-        root.addView(login);
+        root.addView(button("ACCEDI", this::login));
     }
 
-    private void login(Button login) {
+    private void login() {
         if (connecting) return;
 
         String server = serverInput.getText().toString().trim();
@@ -107,7 +113,7 @@ public class MainActivity extends Activity {
         }
 
         connecting = true;
-        login.setEnabled(false);
+        Toast.makeText(this, "Connessione in corso...", Toast.LENGTH_SHORT).show();
 
         executor.execute(() -> {
             try {
@@ -122,10 +128,11 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
                 mainHandler.post(() -> {
                     connecting = false;
-                    login.setEnabled(true);
-                    Toast.makeText(this,
-                            "Accesso non riuscito. Controlla server e credenziali.",
-                            Toast.LENGTH_LONG).show();
+                    Toast.makeText(
+                        this,
+                        "Accesso non riuscito. Controlla server e credenziali.",
+                        Toast.LENGTH_LONG
+                    ).show();
                 });
             }
         });
@@ -149,7 +156,13 @@ public class MainActivity extends Activity {
         listLayout = new LinearLayout(this);
         listLayout.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(listLayout);
-        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+
+        root.addView(scroll, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            0,
+            1
+        ));
+
         root.requestFocus();
     }
 
@@ -163,6 +176,7 @@ public class MainActivity extends Activity {
         executor.execute(() -> {
             try {
                 JSONArray items;
+
                 if (section.equals("live")) {
                     items = api.getLiveStreams();
                 } else if (section.equals("movies")) {
@@ -175,8 +189,10 @@ public class MainActivity extends Activity {
                     if (generation != pageGeneration || listLayout == null) return;
 
                     listLayout.removeAllViews();
+
                     String heading = section.equals("live") ? "Canali TV"
-                            : section.equals("movies") ? "Film" : "Serie";
+                        : section.equals("movies") ? "Film" : "Serie";
+
                     listLayout.addView(text(heading, 20));
 
                     if (items.length() == 0) {
@@ -190,16 +206,22 @@ public class MainActivity extends Activity {
 
                         String name = item.optString("name", "Senza titolo");
                         String id = item.optString(
-                                section.equals("series") ? "series_id" : "stream_id", "");
+                            section.equals("series") ? "series_id" : "stream_id",
+                            ""
+                        );
+
                         String extension = item.optString(
-                                "container_extension",
-                                section.equals("live") ? "ts" : "mp4");
+                            "container_extension",
+                            section.equals("live") ? "ts" : "mp4"
+                        );
 
                         Button entry = button(name, () -> {
                             if (section.equals("series")) {
-                                Toast.makeText(this,
-                                        "La riproduzione degli episodi sarà aggiunta in un prossimo passaggio.",
-                                        Toast.LENGTH_SHORT).show();
+                                Toast.makeText(
+                                    this,
+                                    "La riproduzione delle serie sarà aggiunta in un prossimo passaggio.",
+                                    Toast.LENGTH_SHORT
+                                ).show();
                                 return;
                             }
 
@@ -207,8 +229,11 @@ public class MainActivity extends Activity {
                             String url = api.buildStreamUrl(type, id, extension);
 
                             if (url.isEmpty()) {
-                                Toast.makeText(this, "Indirizzo video non valido.",
-                                        Toast.LENGTH_SHORT).show();
+                                Toast.makeText(
+                                    this,
+                                    "Indirizzo video non valido.",
+                                    Toast.LENGTH_SHORT
+                                ).show();
                                 return;
                             }
 
@@ -219,147 +244,19 @@ public class MainActivity extends Activity {
 
                         entry.setAllCaps(false);
                         entry.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-                        listLayout.addView(entry,
-                                new LinearLayout.LayoutParams(-1, -2));
+                        listLayout.addView(entry);
                     }
                 });
+
             } catch (Exception e) {
                 mainHandler.post(() -> {
                     if (generation != pageGeneration || listLayout == null) return;
+
                     listLayout.removeAllViews();
                     listLayout.addView(text(
-                            "Impossibile caricare la lista. Riprova o controlla il server.",
-                            16));
-                });
-            }
-        });
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        executor.shutdownNow();
-    }
-}
-        passwordInput = field("Password");
-        passwordInput.setInputType(129);
-        root.addView(serverInput);
-        root.addView(usernameInput);
-        root.addView(passwordInput);
-        Button login = button("ACCEDI", () -> login(loginHolder[0]));
-        loginHolder[0] = login;
-        root.addView(login);
-    }
-
-    private final Button[] loginHolder = new Button[1];
-
-    private void login(Button login) {
-        if (connecting) return;
-        String server = serverInput.getText().toString().trim();
-        String username = usernameInput.getText().toString().trim();
-        String password = passwordInput.getText().toString();
-        if (server.isEmpty() || username.isEmpty() || password.isEmpty()) {
-            Toast.makeText(this, "Compila tutti i campi", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        connecting = true;
-        login.setEnabled(false);
-        executor.execute(() -> {
-            try {
-                XtreamApi candidate = new XtreamApi(server, username, password);
-                candidate.login();
-                mainHandler.post(() -> {
-                    api = candidate;
-                    connecting = false;
-                    showHome();
-                });
-            } catch (Exception e) {
-                mainHandler.post(() -> {
-                    connecting = false;
-                    login.setEnabled(true);
-                    Toast.makeText(this, "Accesso non riuscito. Controlla server e credenziali.", Toast.LENGTH_LONG).show();
-                });
-            }
-        });
-    }
-
-    private void showHome() {
-        pageGeneration++;
-        setupRoot();
-        root.addView(text("FAMAG STREAM PLAYER", 24));
-        root.addView(text("Scegli una sezione", 16));
-        root.addView(button("LIVE TV", () -> loadList("live")));
-        root.addView(button("FILM", () -> loadList("movies")));
-        root.addView(button("SERIE", () -> loadList("series")));
-        root.addView(button("ESCI", () -> { api = null; showLogin(); }));
-        ScrollView scroll = new ScrollView(this);
-        listLayout = new LinearLayout(this);
-        listLayout.setOrientation(LinearLayout.VERTICAL);
-        scroll.addView(listLayout);
-        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        root.setFocusableInTouchMode(true);
-        root.requestFocus();
-    }
-
-    private void loadList(String section) {
-        if (api == null) return;
-        int generation = ++pageGeneration;
-        listLayout.removeAllViews();
-        listLayout.addView(text("Caricamento...", 16));
-        executor.execute(() -> {
-            try {
-                JSONArray items;
-                if (section.equals("live")) items = api.getLiveStreams();
-                else if (section.equals("movies")) items = api.getVodStreams();
-                else items = api.getSeries();
-                mainHandler.post(() -> {
-                    if (generation != pageGeneration || listLayout == null) return;
-                    listLayout.removeAllViews();
-                    listLayout.addView(text(section.equals("live") ? "Canali TV" : section.equals("movies") ? "Film" : "Serie", 20));
-                    if (items.length() == 0) {
-                        listLayout.addView(text("Nessun elemento disponibile.", 16));
-                        return;
-                    }
-                    for (int i = 0; i < items.length(); i++) {
-                        JSONObject item = items.optJSONObject(i);
-                        if (item == null) continue;
-                        String name = item.optString("name", "Senza titolo");
-String id = item.optString(
-        section.equals("series") ? "series_id" : "stream_id", "");
-String extension = item.optString(
-        "container_extension", section.equals("live") ? "ts" : "mp4");
-
-Button entry = button(name, () -> {
-    if (section.equals("series")) {
-        Toast.makeText(this,
-                "La riproduzione degli episodi sarà aggiunta nel prossimo passaggio.",
-                Toast.LENGTH_SHORT).show();
-        return;
-    }
-
-    String type = section.equals("live") ? "live" : "movie";
-    String url = api.buildStreamUrl(type, id, extension);
-
-    if (url.isEmpty()) {
-        Toast.makeText(this, "Indirizzo video non valido.",
-                Toast.LENGTH_SHORT).show();
-        return;
-    }
-
-    Intent intent = new Intent(this, PlayerActivity.class);
-    intent.putExtra("stream_url", url);
-    startActivity(intent);
-});
-
-entry.setAllCaps(false);
-entry.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-listLayout.addView(entry, new LinearLayout.LayoutParams(-1, -2));
-                });
-            } catch (Exception e) {
-                mainHandler.post(() -> {
-                    if (generation != pageGeneration || listLayout == null) return;
-                    listLayout.removeAllViews();
-                    listLayout.addView(text("Impossibile caricare la lista. Riprova o controlla il server.", 16));
+                        "Impossibile caricare la lista. Controlla il server.",
+                        16
+                    ));
                 });
             }
         });
