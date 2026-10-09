@@ -3,6 +3,7 @@ package com.famag.streamplayer;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -35,10 +36,65 @@ public class MainActivity extends Activity {
     private boolean connecting = false;
     private int pageGeneration = 0;
 
+    private static final String PREFS_NAME = "FamagSession";
+    private static final String KEY_SERVER = "server";
+    private static final String KEY_USERNAME = "username";
+    private static final String KEY_PASSWORD = "password";
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        showLogin();
+
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+
+        String server = prefs.getString(KEY_SERVER, "");
+        String username = prefs.getString(KEY_USERNAME, "");
+        String password = prefs.getString(KEY_PASSWORD, "");
+
+        if (!server.isEmpty() && !username.isEmpty() && !password.isEmpty()) {
+            connectSavedAccount(server, username, password);
+        } else {
+            showLogin();
+        }
+    }
+
+    private void connectSavedAccount(String server, String username, String password) {
+        connecting = true;
+
+        setupRoot();
+        root.setGravity(Gravity.CENTER);
+        root.addView(text("FAMAG STREAM PLAYER", 24));
+        root.addView(text("Ripristino della sessione...", 16));
+
+        executor.execute(() -> {
+            try {
+                XtreamApi candidate = new XtreamApi(server, username, password);
+                candidate.login();
+
+                mainHandler.post(() -> {
+                    api = candidate;
+                    connecting = false;
+                    showHome();
+                });
+            } catch (Exception e) {
+                mainHandler.post(() -> {
+                    connecting = false;
+
+                    getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                        .edit()
+                        .clear()
+                        .apply();
+
+                    Toast.makeText(
+                        this,
+                        "Sessione non valida. Accedi nuovamente.",
+                        Toast.LENGTH_LONG
+                    ).show();
+
+                    showLogin();
+                });
+            }
+        });
     }
 
     private void setupRoot() {
@@ -121,6 +177,13 @@ public class MainActivity extends Activity {
                 candidate.login();
 
                 mainHandler.post(() -> {
+                    getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                        .edit()
+                        .putString(KEY_SERVER, server)
+                        .putString(KEY_USERNAME, username)
+                        .putString(KEY_PASSWORD, password)
+                        .apply();
+
                     api = candidate;
                     connecting = false;
                     showHome();
@@ -148,7 +211,13 @@ public class MainActivity extends Activity {
         root.addView(button("FILM", () -> loadList("movies")));
         root.addView(button("SERIE", () -> loadList("series")));
         root.addView(button("ESCI", () -> {
+            getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .edit()
+                .clear()
+                .apply();
+
             api = null;
+            pageGeneration++;
             showLogin();
         }));
 
