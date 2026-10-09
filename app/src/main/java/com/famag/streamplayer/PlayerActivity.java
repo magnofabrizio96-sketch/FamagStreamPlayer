@@ -6,6 +6,7 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 import android.graphics.Color;
+import android.util.Log;
 
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
@@ -15,8 +16,20 @@ import androidx.media3.ui.PlayerView;
 
 public class PlayerActivity extends Activity {
 
+    private static final String TAG = "FamagPlayer";
+
     private ExoPlayer player;
     private PlayerView playerView;
+
+    private void showMessage(String message) {
+        runOnUiThread(() ->
+                Toast.makeText(
+                        PlayerActivity.this,
+                        message,
+                        Toast.LENGTH_LONG
+                ).show()
+        );
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -25,11 +38,7 @@ public class PlayerActivity extends Activity {
         String streamUrl = getIntent().getStringExtra("stream_url");
 
         if (streamUrl == null || streamUrl.trim().isEmpty()) {
-            Toast.makeText(
-                    this,
-                    "Indirizzo video mancante",
-                    Toast.LENGTH_LONG
-            ).show();
+            showMessage("Errore: indirizzo video mancante");
             finish();
             return;
         }
@@ -41,7 +50,6 @@ public class PlayerActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
         ));
-
         setContentView(playerView);
 
         try {
@@ -52,33 +60,28 @@ public class PlayerActivity extends Activity {
 
                 @Override
                 public void onPlayerError(PlaybackException error) {
-                    String message = "Errore riproduzione: "
-                            + error.getErrorCodeName()
-                            + " (codice "
-                            + error.errorCode
-                            + ")";
+                    Log.e(TAG, "Errore di riproduzione", error);
 
-                    Toast.makeText(
-                            PlayerActivity.this,
-                            message,
-                            Toast.LENGTH_LONG
-                    ).show();
+                    String message = "Errore LIVE: "
+                            + error.getErrorCodeName()
+                            + " (codice " + error.errorCode + ")";
+
+                    if (error.getMessage() != null) {
+                        message += " - " + error.getMessage();
+                    }
+
+                    showMessage(message);
                 }
 
                 @Override
-                public void onPlaybackStateChanged(int playbackState) {
-                    if (playbackState == Player.STATE_READY) {
-                        Toast.makeText(
-                                PlayerActivity.this,
-                                "Video pronto",
-                                Toast.LENGTH_SHORT
-                        ).show();
-                    } else if (playbackState == Player.STATE_ENDED) {
-                        Toast.makeText(
-                                PlayerActivity.this,
-                                "Riproduzione terminata",
-                                Toast.LENGTH_SHORT
-                        ).show();
+                public void onPlaybackStateChanged(int state) {
+                    if (state == Player.STATE_READY) {
+                        Log.d(TAG, "Player pronto");
+                        showMessage("Player pronto");
+                    } else if (state == Player.STATE_BUFFERING) {
+                        Log.d(TAG, "Caricamento video...");
+                    } else if (state == Player.STATE_ENDED) {
+                        Log.d(TAG, "Riproduzione terminata");
                     }
                 }
             });
@@ -88,11 +91,16 @@ public class PlayerActivity extends Activity {
             player.play();
 
         } catch (Exception e) {
-            Toast.makeText(
-                    this,
-                    "Errore player: " + e.getClass().getSimpleName(),
-                    Toast.LENGTH_LONG
-            ).show();
+            Log.e(TAG, "Eccezione durante l'avvio del player", e);
+
+            String message = "Errore player: "
+                    + e.getClass().getSimpleName();
+
+            if (e.getMessage() != null) {
+                message += " - " + e.getMessage();
+            }
+
+            showMessage(message);
         }
     }
 
