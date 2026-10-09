@@ -23,7 +23,7 @@ jobs:
       - name: Compila APK
         run: |
           gradle --version
-          gradle assembleDebug
+          gradle assembleDebug --stacktrace
 
       - name: Pubblica APK
         uses: actions/upload-artifact@v4
