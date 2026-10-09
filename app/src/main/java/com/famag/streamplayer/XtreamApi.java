@@ -1,7 +1,6 @@
 package com.famag.streamplayer;
 
 import org.json.JSONArray;
-import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -13,6 +12,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
 public class XtreamApi {
+
     private final String host;
     private final String username;
     private final String password;
@@ -29,15 +29,18 @@ public class XtreamApi {
 
     private String request(String action) throws Exception {
         String separator = host.contains("?") ? "&" : "?";
+
         String address = host + "/player_api.php" + separator
                 + "username=" + encode(username)
                 + "&password=" + encode(password);
+
         if (action != null && !action.isEmpty()) {
             address += "&action=" + encode(action);
         }
 
         HttpURLConnection connection = (HttpURLConnection)
                 new URL(address).openConnection();
+
         connection.setRequestMethod("GET");
         connection.setConnectTimeout(12000);
         connection.setReadTimeout(15000);
@@ -45,23 +48,36 @@ public class XtreamApi {
 
         try {
             int status = connection.getResponseCode();
+
             InputStream stream = status >= 200 && status < 400
-                    ? connection.getInputStream() : connection.getErrorStream();
+                    ? connection.getInputStream()
+                    : connection.getErrorStream();
+
             if (stream == null) {
-                throw new Exception("Il server non ha restituito una risposta.");
+                throw new Exception(
+                        "Il server non ha restituito una risposta."
+                );
             }
-            BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(stream, StandardCharsets.UTF_8));
+
             StringBuilder result = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                result.append(line);
+
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(
+                            stream, StandardCharsets.UTF_8))) {
+
+                String line;
+
+                while ((line = reader.readLine()) != null) {
+                    result.append(line);
+                }
             }
-            reader.close();
+
             if (status < 200 || status >= 300) {
                 throw new Exception("Risposta HTTP: " + status);
             }
+
             return result.toString();
+
         } finally {
             connection.disconnect();
         }
@@ -69,12 +85,21 @@ public class XtreamApi {
 
     public JSONObject login() throws Exception {
         JSONObject response = new JSONObject(request(""));
+
         JSONObject info = response.optJSONObject("user_info");
+
         if (info == null || info.optInt("auth", 0) != 1) {
-            throw new Exception("Accesso non riuscito. Controlla server e credenziali.");
+            throw new Exception(
+                    "Accesso non riuscito. Controlla server e credenziali."
+            );
         }
+
         return response;
     }
+
+    // =========================
+    // CANALI TV IN DIRETTA
+    // =========================
 
     public JSONArray getLiveCategories() throws Exception {
         return new JSONArray(request("get_live_categories"));
@@ -84,6 +109,10 @@ public class XtreamApi {
         return new JSONArray(request("get_live_streams"));
     }
 
+    // =========================
+    // FILM
+    // =========================
+
     public JSONArray getVodCategories() throws Exception {
         return new JSONArray(request("get_vod_categories"));
     }
@@ -91,6 +120,10 @@ public class XtreamApi {
     public JSONArray getVodStreams() throws Exception {
         return new JSONArray(request("get_vod_streams"));
     }
+
+    // =========================
+    // SERIE TV
+    // =========================
 
     public JSONArray getSeriesCategories() throws Exception {
         return new JSONArray(request("get_series_categories"));
@@ -100,6 +133,69 @@ public class XtreamApi {
         return new JSONArray(request("get_series"));
     }
 
+    /**
+     * Recupera i dettagli di una serie.
+     * La risposta può contenere informazioni sulla serie,
+     * le stagioni e gli episodi, secondo il server IPTV.
+     */
+    public JSONObject getSeriesInfo(String seriesId) throws Exception {
+        String separator = host.contains("?") ? "&" : "?";
+
+        String address = host + "/player_api.php" + separator
+                + "username=" + encode(username)
+                + "&password=" + encode(password)
+                + "&action=get_series_info"
+                + "&series_id=" + encode(seriesId);
+
+        HttpURLConnection connection = (HttpURLConnection)
+                new URL(address).openConnection();
+
+        connection.setRequestMethod("GET");
+        connection.setConnectTimeout(12000);
+        connection.setReadTimeout(15000);
+        connection.setRequestProperty("Accept", "application/json");
+
+        try {
+            int status = connection.getResponseCode();
+
+            InputStream stream = status >= 200 && status < 400
+                    ? connection.getInputStream()
+                    : connection.getErrorStream();
+
+            if (stream == null) {
+                throw new Exception(
+                        "Il server non ha restituito i dettagli della serie."
+                );
+            }
+
+            StringBuilder result = new StringBuilder();
+
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(
+                            stream, StandardCharsets.UTF_8))) {
+
+                String line;
+
+                while ((line = reader.readLine()) != null) {
+                    result.append(line);
+                }
+            }
+
+            if (status < 200 || status >= 300) {
+                throw new Exception("Risposta HTTP: " + status);
+            }
+
+            return new JSONObject(result.toString());
+
+        } finally {
+            connection.disconnect();
+        }
+    }
+
+    // =========================
+    // INFORMAZIONI ACCOUNT
+    // =========================
+
     public String getHost() {
         return host;
     }
@@ -108,12 +204,27 @@ public class XtreamApi {
         return username;
     }
 
-    public String buildStreamUrl(String type, String id, String extension) {
+    // =========================
+    // COSTRUZIONE URL STREAM
+    // =========================
+
+    public String buildStreamUrl(
+            String type,
+            String id,
+            String extension) {
+
         String safeType = type.equals("live") ? "live" : type;
-        String suffix = extension == null || extension.isEmpty() ? "mp4" : extension;
+
+        String suffix = extension == null || extension.isEmpty()
+                ? "mp4"
+                : extension;
+
         try {
-            return host + "/" + safeType + "/" + encode(username) + "/"
-                    + encode(password) + "/" + encode(id) + "." + suffix;
+            return host + "/" + safeType + "/"
+                    + encode(username) + "/"
+                    + encode(password) + "/"
+                    + encode(id) + "." + suffix;
+
         } catch (Exception e) {
             return "";
         }
