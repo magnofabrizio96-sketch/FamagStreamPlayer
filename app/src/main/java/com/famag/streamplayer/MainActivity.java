@@ -4,17 +4,20 @@ package com.famag.streamplayer;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -23,6 +26,9 @@ import android.widget.Toast;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -43,6 +49,9 @@ public class MainActivity extends Activity {
     private final ExecutorService executor =
         Executors.newSingleThreadExecutor();
 
+    private final ExecutorService imageExecutor =
+        Executors.newFixedThreadPool(4);
+
     private final Handler mainHandler =
         new Handler(Looper.getMainLooper());
 
@@ -52,6 +61,7 @@ public class MainActivity extends Activity {
 
     private LinearLayout root;
     private LinearLayout listLayout;
+    private ScrollView listScroll;
     private XtreamApi api;
 
     private boolean connecting = false;
@@ -83,9 +93,7 @@ public class MainActivity extends Activity {
     }
 
     private GradientDrawable background(
-            int color,
-            int radius,
-            int strokeColor) {
+            int color, int radius, int strokeColor) {
 
         GradientDrawable drawable = new GradientDrawable();
         drawable.setColor(color);
@@ -139,18 +147,8 @@ public class MainActivity extends Activity {
         return b;
     }
 
-    private LinearLayout.LayoutParams params(
-            int width, int height) {
-        return new LinearLayout.LayoutParams(
-            width == -3 ? ViewGroup.LayoutParams.WRAP_CONTENT : width,
-            height == -3 ? ViewGroup.LayoutParams.WRAP_CONTENT : height
-        );
-    }
-
     private void connectSavedAccount(
-            String server,
-            String username,
-            String password) {
+            String server, String username, String password) {
 
         if (connecting) return;
         connecting = true;
@@ -164,10 +162,7 @@ public class MainActivity extends Activity {
         logo.setTextColor(LIGHT_BLUE);
         root.addView(logo);
 
-        TextView status = text(
-            "Connessione al tuo account...",
-            16
-        );
+        TextView status = text("Connessione al tuo account...", 16);
         status.setGravity(Gravity.CENTER);
         root.addView(status);
 
@@ -175,7 +170,6 @@ public class MainActivity extends Activity {
             try {
                 XtreamApi candidate =
                     new XtreamApi(server, username, password);
-
                 candidate.login();
 
                 mainHandler.post(() -> {
@@ -183,7 +177,6 @@ public class MainActivity extends Activity {
                     connecting = false;
                     showHome();
                 });
-
             } catch (Exception e) {
                 mainHandler.post(() -> {
                     connecting = false;
@@ -191,12 +184,11 @@ public class MainActivity extends Activity {
 
                     Toast.makeText(
                         this,
-                        "Connessione non riuscita. Verifica il server e riprova.",
+                        "Connessione non riuscita. Verifica server e credenziali.",
                         Toast.LENGTH_LONG
                     ).show();
 
                     showLogin();
-
                     serverInput.setText(server);
                     usernameInput.setText(username);
                     passwordInput.setText(password);
@@ -227,15 +219,10 @@ public class MainActivity extends Activity {
         content.addView(brand);
 
         TextView subtitle = text(
-            "Tutto il tuo intrattenimento, in un unico posto",
-            14
-        );
+            "Tutto il tuo intrattenimento, in un unico posto", 14);
         subtitle.setGravity(Gravity.CENTER);
         subtitle.setTextColor(MUTED);
         content.addView(subtitle);
-
-        View space = new View(this);
-        content.addView(space, params(-3, dp(22)));
 
         serverInput = field("URL del server");
         usernameInput = field("Nome utente");
@@ -244,17 +231,12 @@ public class MainActivity extends Activity {
 
         LinearLayout.LayoutParams inputParams =
             new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(56)
-            );
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(56));
         inputParams.setMargins(0, dp(7), 0, dp(7));
 
         content.addView(serverInput, inputParams);
         content.addView(usernameInput, inputParams);
         content.addView(passwordInput, inputParams);
-
-        View gap = new View(this);
-        content.addView(gap, params(-3, dp(12)));
 
         Button loginButton = button("ACCEDI", this::login);
         loginButton.setTextSize(17);
@@ -262,69 +244,42 @@ public class MainActivity extends Activity {
 
         LinearLayout.LayoutParams loginParams =
             new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(56)
-            );
-        loginParams.setMargins(0, dp(8), 0, dp(8));
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(56));
+        loginParams.setMargins(0, dp(16), 0, dp(8));
 
         content.addView(loginButton, loginParams);
 
-        TextView note = text(
-            "Accedi con le credenziali del tuo servizio.",
-            13
-        );
-        note.setGravity(Gravity.CENTER);
-        note.setTextColor(MUTED);
-        content.addView(note);
-
         scroll.addView(content);
         root.addView(scroll, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            0,
-            1
-        ));
+            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
     }
 
     private void login() {
         if (connecting) return;
 
-        String server =
-            serverInput.getText().toString().trim();
-        String username =
-            usernameInput.getText().toString().trim();
-        String password =
-            passwordInput.getText().toString();
+        String server = serverInput.getText().toString().trim();
+        String username = usernameInput.getText().toString().trim();
+        String password = passwordInput.getText().toString();
 
-        if (server.isEmpty()
-                || username.isEmpty()
-                || password.isEmpty()) {
-            Toast.makeText(
-                this,
-                "Compila tutti i campi",
-                Toast.LENGTH_SHORT
-            ).show();
+        if (server.isEmpty() || username.isEmpty() || password.isEmpty()) {
+            Toast.makeText(this, "Compila tutti i campi",
+                Toast.LENGTH_SHORT).show();
             return;
         }
 
         connecting = true;
-
-        Toast.makeText(
-            this,
-            "Connessione in corso...",
-            Toast.LENGTH_SHORT
-        ).show();
+        Toast.makeText(this, "Connessione in corso...",
+            Toast.LENGTH_SHORT).show();
 
         executor.execute(() -> {
             try {
                 XtreamApi candidate =
                     new XtreamApi(server, username, password);
-
                 candidate.login();
 
                 mainHandler.post(() -> {
-                    getSharedPreferences(
-                        PREFS_NAME, MODE_PRIVATE
-                    ).edit()
+                    getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                        .edit()
                         .putString(KEY_SERVER, server)
                         .putString(KEY_USERNAME, username)
                         .putString(KEY_PASSWORD, password)
@@ -334,54 +289,33 @@ public class MainActivity extends Activity {
                     connecting = false;
                     showHome();
                 });
-
             } catch (Exception e) {
                 mainHandler.post(() -> {
                     connecting = false;
-
-                    Toast.makeText(
-                        this,
+                    Toast.makeText(this,
                         "Accesso non riuscito. Controlla server e credenziali.",
-                        Toast.LENGTH_LONG
-                    ).show();
+                        Toast.LENGTH_LONG).show();
                 });
             }
         });
     }
 
-    private LinearLayout createTileRow() {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        return row;
-    }
-
     private void addTile(
-            LinearLayout row,
-            String icon,
-            String title,
-            String subtitle,
-            int color,
-            Runnable action) {
+            LinearLayout row, String icon, String title,
+            String subtitle, int color, Runnable action) {
 
         LinearLayout tile = new LinearLayout(this);
         tile.setOrientation(LinearLayout.VERTICAL);
         tile.setGravity(Gravity.CENTER);
         tile.setPadding(dp(8), dp(12), dp(8), dp(12));
-        tile.setBackground(background(
-            color, 18, Color.rgb(51, 108, 190)
-        ));
+        tile.setBackground(background(color, 18, LIGHT_BLUE));
         tile.setClickable(true);
         tile.setFocusable(true);
-        tile.setContentDescription(title);
 
-        tile.setOnFocusChangeListener((v, focused) -> {
+        tile.setOnFocusChangeListener((v, focused) ->
             v.setBackground(background(
-                focused ? LIGHT_BLUE : color,
-                18,
-                focused ? WHITE : Color.rgb(51, 108, 190)
-            ));
-        });
+                focused ? LIGHT_BLUE : color, 18,
+                focused ? WHITE : LIGHT_BLUE)));
 
         TextView iconView = text(icon, 32);
         iconView.setGravity(Gravity.CENTER);
@@ -392,113 +326,71 @@ public class MainActivity extends Activity {
         titleView.setTypeface(null, Typeface.BOLD);
         tile.addView(titleView);
 
-        TextView subtitleView = text(subtitle, 12);
-        subtitleView.setGravity(Gravity.CENTER);
-        subtitleView.setTextColor(Color.rgb(221, 233, 250));
-        tile.addView(subtitleView);
+        TextView sub = text(subtitle, 12);
+        sub.setGravity(Gravity.CENTER);
+        sub.setTextColor(Color.rgb(221, 233, 250));
+        tile.addView(sub);
 
         tile.setOnClickListener(v -> action.run());
 
-        LinearLayout.LayoutParams tileParams =
-            new LinearLayout.LayoutParams(
-                0,
-                dp(142),
-                1
-            );
-        tileParams.setMargins(dp(5), dp(5), dp(5), dp(5));
-
-        row.addView(tile, tileParams);
+        LinearLayout.LayoutParams p =
+            new LinearLayout.LayoutParams(0, dp(142), 1);
+        p.setMargins(dp(5), dp(5), dp(5), dp(5));
+        row.addView(tile, p);
     }
 
     private void showHome() {
         pageGeneration++;
         setupRoot();
 
-        ScrollView homeScroll = new ScrollView(this);
-        homeScroll.setFillViewport(true);
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
 
         LinearLayout home = new LinearLayout(this);
         home.setOrientation(LinearLayout.VERTICAL);
 
-        LinearLayout header = new LinearLayout(this);
-        header.setOrientation(LinearLayout.VERTICAL);
-        header.setPadding(dp(4), dp(2), dp(4), dp(12));
-
         TextView logo = text("FAMAG", 30);
         logo.setTypeface(null, Typeface.BOLD);
         logo.setTextColor(LIGHT_BLUE);
-        header.addView(logo);
+        home.addView(logo);
 
         TextView heading = text("STREAM PLAYER", 17);
         heading.setTypeface(null, Typeface.BOLD);
-        header.addView(heading);
+        home.addView(heading);
 
         TextView welcome = text("Benvenuto! Cosa vuoi guardare?", 14);
         welcome.setTextColor(MUTED);
-        header.addView(welcome);
+        home.addView(welcome);
 
-        home.addView(header);
+        LinearLayout row1 = new LinearLayout(this);
+        row1.setOrientation(LinearLayout.HORIZONTAL);
 
-        LinearLayout row1 = createTileRow();
-
-        addTile(
-            row1,
-            "\u25B6",
-            "LIVE TV",
-            "Canali in diretta",
-            Color.rgb(17, 71, 151),
-            () -> loadList("live")
-        );
-
-        addTile(
-            row1,
-            "\u25A3",
-            "FILM",
-            "Film disponibili",
-            Color.rgb(22, 54, 106),
-            () -> loadList("movies")
-        );
-
+        addTile(row1, "\u25B6", "LIVE TV", "Canali in diretta",
+            Color.rgb(17, 71, 151), () -> loadList("live"));
+        addTile(row1, "\u25A3", "FILM", "Film disponibili",
+            Color.rgb(22, 54, 106), () -> loadList("movies"));
         home.addView(row1);
 
-        LinearLayout row2 = createTileRow();
+        LinearLayout row2 = new LinearLayout(this);
+        row2.setOrientation(LinearLayout.HORIZONTAL);
 
-        addTile(
-            row2,
-            "\u25C9",
-            "SERIE TV",
-            "Le tue serie",
-            Color.rgb(20, 77, 126),
-            () -> loadList("series")
-        );
-
-        addTile(
-            row2,
-            "\u2699",
-            "ESCI",
-            "Disconnetti account",
-            Color.rgb(35, 45, 65),
-            () -> logout()
-        );
-
+        addTile(row2, "\u25C9", "SERIE TV", "Le tue serie",
+            Color.rgb(20, 77, 126), () -> loadList("series"));
+        addTile(row2, "\u2699", "ESCI", "Disconnetti account",
+            Color.rgb(35, 45, 65), this::logout);
         home.addView(row2);
 
         TextView sectionTitle = text("I TUOI CONTENUTI", 17);
         sectionTitle.setTypeface(null, Typeface.BOLD);
-        sectionTitle.setPadding(dp(8), dp(18), dp(8), dp(8));
         home.addView(sectionTitle);
 
         listLayout = new LinearLayout(this);
         listLayout.setOrientation(LinearLayout.VERTICAL);
         home.addView(listLayout);
 
-        homeScroll.addView(home);
-
-        root.addView(homeScroll, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            0,
-            1
-        ));
+        scroll.addView(home);
+        root.addView(scroll, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
         root.requestFocus();
     }
@@ -507,12 +399,70 @@ public class MainActivity extends Activity {
         pageGeneration++;
 
         getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-            .edit()
-            .clear()
-            .apply();
+            .edit().clear().apply();
 
         api = null;
         showLogin();
+    }
+
+    private Bitmap downloadBitmap(String address) {
+        HttpURLConnection connection = null;
+
+        try {
+            URL url = new URL(address);
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setConnectTimeout(8000);
+            connection.setReadTimeout(10000);
+            connection.setInstanceFollowRedirects(true);
+            connection.setRequestProperty("User-Agent", "FamagStreamPlayer");
+
+            int status = connection.getResponseCode();
+            if (status < 200 || status >= 300) return null;
+
+            try (InputStream stream = connection.getInputStream()) {
+                return BitmapFactory.decodeStream(stream);
+            }
+        } catch (Exception e) {
+            return null;
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    private void loadPoster(ImageView image, String address, int generation) {
+        image.setImageDrawable(null);
+        image.setBackground(background(PANEL, 10, Color.TRANSPARENT));
+
+        if (address == null || address.trim().isEmpty()
+                || address.equals("null")) {
+            return;
+        }
+
+        image.setTag(address);
+
+        imageExecutor.execute(() -> {
+            Bitmap bitmap = downloadBitmap(address);
+
+            if (bitmap != null) {
+                mainHandler.post(() -> {
+                    if (generation != pageGeneration) return;
+                    if (address.equals(image.getTag())) {
+                        image.setImageBitmap(bitmap);
+                        image.setBackgroundColor(Color.TRANSPARENT);
+                    }
+                });
+            }
+        });
+    }
+
+    private String firstImage(JSONObject item, String... keys) {
+        for (String key : keys) {
+            String value = item.optString(key, "");
+            if (!value.isEmpty() && !value.equals("null")) {
+                return value;
+            }
+        }
+        return "";
     }
 
     private void loadList(String section) {
@@ -522,12 +472,8 @@ public class MainActivity extends Activity {
 
         listLayout.removeAllViews();
 
-        Button backButton = button(
-            "\u2190 TORNA ALLA HOME",
-            this::showHome
-        );
-        listLayout.addView(backButton);
-
+        listLayout.addView(button("\u2190 TORNA ALLA HOME",
+            this::showHome));
         listLayout.addView(text("Caricamento...", 16));
 
         executor.execute(() -> {
@@ -543,24 +489,16 @@ public class MainActivity extends Activity {
                 }
 
                 mainHandler.post(() -> {
-                    if (generation != pageGeneration
-                            || listLayout == null) {
+                    if (generation != pageGeneration || listLayout == null) {
                         return;
                     }
 
                     listLayout.removeAllViews();
+                    listLayout.addView(button("\u2190 TORNA ALLA HOME",
+                        this::showHome));
 
-                    Button back = button(
-                        "\u2190 TORNA ALLA HOME",
-                        this::showHome
-                    );
-                    listLayout.addView(back);
-
-                    String heading = section.equals("live")
-                        ? "Canali TV"
-                        : section.equals("movies")
-                            ? "Film"
-                            : "Serie TV";
+                    String heading = section.equals("live") ? "Canali TV"
+                        : section.equals("movies") ? "Film" : "Serie TV";
 
                     TextView title = text(heading, 23);
                     title.setTypeface(null, Typeface.BOLD);
@@ -568,9 +506,7 @@ public class MainActivity extends Activity {
 
                     if (items.length() == 0) {
                         listLayout.addView(text(
-                            "Nessun elemento disponibile.",
-                            16
-                        ));
+                            "Nessun elemento disponibile.", 16));
                         return;
                     }
 
@@ -578,97 +514,118 @@ public class MainActivity extends Activity {
                         JSONObject item = items.optJSONObject(i);
                         if (item == null) continue;
 
-                        String name = item.optString(
-                            "name", "Senza titolo"
-                        );
-
+                        String name = item.optString("name", "Senza titolo");
                         String id = item.optString(
-                            section.equals("series")
-                                ? "series_id"
-                                : "stream_id",
-                            ""
-                        );
+                            section.equals("series") ? "series_id" : "stream_id",
+                            "");
 
                         String extension = item.optString(
                             "container_extension",
-                            section.equals("live") ? "ts" : "mp4"
-                        );
+                            section.equals("live") ? "ts" : "mp4");
 
-                        Button entry = button(
-                            "\u25B6   " + name,
-                            () -> {
-                                if (section.equals("series")) {
-                                    Toast.makeText(
-                                        this,
-                                        "La riproduzione delle serie sarà aggiunta in un prossimo aggiornamento.",
-                                        Toast.LENGTH_SHORT
-                                    ).show();
-                                    return;
-                                }
+                        String poster = section.equals("series")
+                            ? firstImage(item, "cover", "cover_big", "stream_icon")
+                            : firstImage(item, "stream_icon", "cover", "cover_big");
 
-                                String type = section.equals("live")
-                                    ? "live"
-                                    : "movie";
+                        LinearLayout card = new LinearLayout(this);
+                        card.setOrientation(LinearLayout.HORIZONTAL);
+                        card.setGravity(Gravity.CENTER_VERTICAL);
+                        card.setPadding(dp(8), dp(8), dp(8), dp(8));
+                        card.setBackground(background(PANEL, 12,
+                            Color.rgb(32, 49, 76)));
 
-                                String url = api.buildStreamUrl(
-                                    type, id, extension
-                                );
+                        ImageView posterView = new ImageView(this);
+                        posterView.setScaleType(ImageView.ScaleType.CENTER_CROP);
 
-                                if (url.isEmpty()) {
-                                    Toast.makeText(
-                                        this,
-                                        "Indirizzo video non valido.",
-                                        Toast.LENGTH_SHORT
-                                    ).show();
-                                    return;
-                                }
+                        int posterWidth = section.equals("live") ? 64 : 88;
+                        int posterHeight = section.equals("live") ? 64 : 118;
 
-                                Intent intent = new Intent(
-                                    MainActivity.this,
-                                    PlayerActivity.class
-                                );
+                        LinearLayout.LayoutParams imageParams =
+                            new LinearLayout.LayoutParams(
+                                dp(posterWidth), dp(posterHeight));
+                        imageParams.setMargins(0, 0, dp(12), 0);
 
-                                intent.putExtra("stream_url", url);
-                                startActivity(intent);
+                        card.addView(posterView, imageParams);
+                        loadPoster(posterView, poster, generation);
+
+                        LinearLayout details = new LinearLayout(this);
+                        details.setOrientation(LinearLayout.VERTICAL);
+                        details.setGravity(Gravity.CENTER_VERTICAL);
+
+                        TextView itemName = text(name, 15);
+                        itemName.setTypeface(null, Typeface.BOLD);
+                        itemName.setPadding(0, dp(4), 0, dp(4));
+                        details.addView(itemName);
+
+                        TextView typeLabel = text(
+                            section.equals("live") ? "Canale TV"
+                                : section.equals("movies") ? "Film" : "Serie TV",
+                            12);
+                        typeLabel.setTextColor(MUTED);
+                        typeLabel.setPadding(0, dp(2), 0, dp(4));
+                        details.addView(typeLabel);
+
+                        card.addView(details, new LinearLayout.LayoutParams(
+                            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+                        card.setFocusable(true);
+                        card.setClickable(true);
+
+                        card.setOnFocusChangeListener((v, focused) ->
+                            v.setBackground(background(
+                                focused ? Color.rgb(28, 62, 108) : PANEL,
+                                12,
+                                focused ? LIGHT_BLUE : Color.rgb(32, 49, 76))));
+
+                        card.setOnClickListener(v -> {
+                            if (section.equals("series")) {
+                                Toast.makeText(
+                                    this,
+                                    "La riproduzione delle serie sarà aggiunta in un prossimo aggiornamento.",
+                                    Toast.LENGTH_SHORT).show();
+                                return;
                             }
-                        );
 
-                        entry.setGravity(
-                            Gravity.START | Gravity.CENTER_VERTICAL
-                        );
+                            String type = section.equals("live")
+                                ? "live" : "movie";
 
-                        LinearLayout.LayoutParams entryParams =
+                            String url = api.buildStreamUrl(
+                                type, id, extension);
+
+                            if (url.isEmpty()) {
+                                Toast.makeText(this,
+                                    "Indirizzo video non valido.",
+                                    Toast.LENGTH_SHORT).show();
+                                return;
+                            }
+
+                            Intent intent = new Intent(
+                                MainActivity.this, PlayerActivity.class);
+                            intent.putExtra("stream_url", url);
+                            startActivity(intent);
+                        });
+
+                        LinearLayout.LayoutParams cardParams =
                             new LinearLayout.LayoutParams(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
-                                ViewGroup.LayoutParams.WRAP_CONTENT
-                            );
+                                ViewGroup.LayoutParams.WRAP_CONTENT);
+                        cardParams.setMargins(0, dp(4), 0, dp(4));
 
-                        entryParams.setMargins(
-                            0, dp(3), 0, dp(3)
-                        );
-
-                        listLayout.addView(entry, entryParams);
+                        listLayout.addView(card, cardParams);
                     }
                 });
-
             } catch (Exception e) {
                 mainHandler.post(() -> {
-                    if (generation != pageGeneration
-                            || listLayout == null) {
+                    if (generation != pageGeneration || listLayout == null) {
                         return;
                     }
 
                     listLayout.removeAllViews();
-
-                    listLayout.addView(button(
-                        "\u2190 TORNA ALLA HOME",
-                        this::showHome
-                    ));
-
+                    listLayout.addView(button("\u2190 TORNA ALLA HOME",
+                        this::showHome));
                     listLayout.addView(text(
-                        "Impossibile caricare la lista. Controlla la connessione e il server.",
-                        16
-                    ));
+                        "Impossibile caricare la lista. Controlla il server.",
+                        16));
                 });
             }
         });
@@ -678,5 +635,6 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         super.onDestroy();
         executor.shutdownNow();
+        imageExecutor.shutdownNow();
     }
 }
