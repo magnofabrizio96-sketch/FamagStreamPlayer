@@ -615,4 +615,182 @@ public class MainActivity extends Activity {
 
                     content.removeAllViews();
 
-                    JSONObject info = details.optJSONObject("info")
+                    JSONObject info = details.optJSONObject("info");
+                    if (info != null) {
+                        String plot = info.optString("plot", "");
+                        if (!plot.isEmpty() && !plot.equals("null")) {
+                            TextView description = text(plot, 14);
+                            description.setTextColor(MUTED);
+                            content.addView(description);
+                        }
+                    }
+
+                    JSONObject episodes =
+                            details.optJSONObject("episodes");
+
+                    if (episodes == null || episodes.length() == 0) {
+                        content.addView(text(
+                                "Nessun episodio disponibile.", 16));
+                        return;
+                    }
+
+                    List<String> seasonKeys = new ArrayList<>();
+                    Iterator<String> iterator = episodes.keys();
+
+                    while (iterator.hasNext()) {
+                        seasonKeys.add(iterator.next());
+                    }
+
+                    Collections.sort(seasonKeys, (a, b) -> {
+                        try {
+                            return Integer.compare(
+                                    Integer.parseInt(a),
+                                    Integer.parseInt(b));
+                        } catch (NumberFormatException e) {
+                            return a.compareTo(b);
+                        }
+                    });
+
+                    JSONArray seasons = details.optJSONArray("seasons");
+                    content.addView(text("STAGIONI", 20));
+
+                    for (String seasonKey : seasonKeys) {
+                        JSONArray seasonEpisodes =
+                                episodes.optJSONArray(seasonKey);
+
+                        if (seasonEpisodes == null) continue;
+
+                        String seasonTitle = "Stagione " + seasonKey;
+
+                        if (seasons != null) {
+                            for (int i = 0; i < seasons.length(); i++) {
+                                JSONObject season =
+                                        seasons.optJSONObject(i);
+
+                                if (season == null) continue;
+
+                                String number = season.optString(
+                                        "season_number", "");
+
+                                if (number.equals(seasonKey)) {
+                                    String seasonName = season.optString(
+                                            "name", "");
+
+                                    if (!seasonName.isEmpty()
+                                            && !seasonName.equals("null")) {
+                                        seasonTitle = seasonName;
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+
+                        TextView seasonHeading =
+                                text(seasonTitle, 18);
+                        seasonHeading.setTypeface(null, Typeface.BOLD);
+                        seasonHeading.setTextColor(LIGHT_BLUE);
+                        content.addView(seasonHeading);
+
+                        for (int i = 0;
+                                i < seasonEpisodes.length(); i++) {
+
+                            JSONObject episode =
+                                    seasonEpisodes.optJSONObject(i);
+
+                            if (episode == null) continue;
+
+                            String episodeId =
+                                    episode.optString("id", "");
+
+                            String episodeName = episode.optString(
+                                    "title", "Episodio " + (i + 1));
+
+                            String episodeExtension = episode.optString(
+                                    "container_extension", "mp4");
+
+                            String episodeNumber = episode.optString(
+                                    "episode_num", "");
+
+                            String buttonTitle = episodeName;
+                            if (!episodeNumber.isEmpty()
+                                    && !episodeNumber.equals("null")) {
+                                buttonTitle = "E" + episodeNumber
+                                        + " - " + episodeName;
+                            }
+
+                            final String finalEpisodeId = episodeId;
+                            final String finalEpisodeName = episodeName;
+                            final String finalEpisodeExtension =
+                                    episodeExtension;
+                            final String finalButtonTitle = buttonTitle;
+
+                            Button episodeButton = button(
+                                    "▶  " + finalButtonTitle, () -> {
+                                if (finalEpisodeId.isEmpty()) {
+                                    Toast.makeText(this,
+                                            "ID episodio non disponibile",
+                                            Toast.LENGTH_SHORT).show();
+                                } else {
+                                    playStream("series",
+                                            finalEpisodeId,
+                                            finalEpisodeExtension,
+                                            finalEpisodeName);
+                                }
+                            });
+
+                            LinearLayout.LayoutParams params =
+                                    new LinearLayout.LayoutParams(
+                                            ViewGroup.LayoutParams.MATCH_PARENT,
+                                            ViewGroup.LayoutParams.WRAP_CONTENT);
+                            params.setMargins(0, dp(2), 0, dp(2));
+                            content.addView(episodeButton, params);
+                        }
+                    }
+                });
+
+            } catch (Exception e) {
+                handler.post(() -> {
+                    if (token != generation) return;
+                    content.removeAllViews();
+                    content.addView(text(
+                            "Errore nel caricamento della serie. "
+                                    + "Riprova più tardi.", 16));
+                });
+            }
+        });
+    }
+
+    private void playStream(
+            String type,
+            String id,
+            String extension,
+            String title) {
+
+        if (api == null || id == null || id.isEmpty()) {
+            Toast.makeText(this, "Video non disponibile",
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        String streamUrl = api.buildStreamUrl(type, id, extension);
+
+        if (streamUrl == null || streamUrl.isEmpty()) {
+            Toast.makeText(this, "Impossibile creare l'URL video",
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        Intent intent = new Intent(this, PlayerActivity.class);
+        intent.putExtra("stream_url", streamUrl);
+        intent.putExtra("title", title);
+        startActivity(intent);
+    }
+
+    @Override
+    protected void onDestroy() {
+        generation++;
+        executor.shutdownNow();
+        imageExecutor.shutdownNow();
+        super.onDestroy();
+    }
+}
