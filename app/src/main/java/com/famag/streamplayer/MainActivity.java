@@ -63,14 +63,42 @@ public class MainActivity extends Activity {
         layout.addView(login, buttonParams);
 
         login.setOnClickListener(v -> {
-            if (serverInput.getText().toString().trim().isEmpty()
-                    || usernameInput.getText().toString().trim().isEmpty()
-                    || passwordInput.getText().toString().isEmpty()) {
-                Toast.makeText(this, "Compila tutti i campi", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            Toast.makeText(this, "Schermata pronta. Il collegamento al server sarà aggiunto nel prossimo passaggio.", Toast.LENGTH_LONG).show();
-        });
+    if (connecting) return;
+
+    String server = serverInput.getText().toString().trim();
+    String username = usernameInput.getText().toString().trim();
+    String password = passwordInput.getText().toString();
+
+    if (server.isEmpty() || username.isEmpty() || password.isEmpty()) {
+        Toast.makeText(this, "Compila tutti i campi", Toast.LENGTH_SHORT).show();
+        return;
+    }
+
+    connecting = true;
+    login.setEnabled(false);
+    Toast.makeText(this, "Connessione in corso...", Toast.LENGTH_SHORT).show();
+
+    executor.execute(() -> {
+        try {
+            XtreamApi api = new XtreamApi(server, username, password);
+            api.login();
+
+            mainHandler.post(() -> {
+                connecting = false;
+                login.setEnabled(true);
+                Toast.makeText(this, "Accesso riuscito!", Toast.LENGTH_LONG).show();
+            });
+        } catch (Exception e) {
+            mainHandler.post(() -> {
+                connecting = false;
+                login.setEnabled(true);
+                Toast.makeText(this,
+                    "Accesso non riuscito. Controlla server e credenziali.",
+                    Toast.LENGTH_LONG).show();
+            });
+        }
+    });
+});
 
         setContentView(layout);
     }
