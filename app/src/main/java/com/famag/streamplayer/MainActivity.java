@@ -164,12 +164,36 @@ public class MainActivity extends Activity {
                         JSONObject item = items.optJSONObject(i);
                         if (item == null) continue;
                         String name = item.optString("name", "Senza titolo");
-                        String id = item.optString(section.equals("series") ? "series_id" : "stream_id", "");
-                        Button entry = button(name, () -> Toast.makeText(this, "Elemento selezionato. Il player sarà collegato in un passaggio successivo.", Toast.LENGTH_SHORT).show());
-                        entry.setAllCaps(false);
-                        entry.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-                        listLayout.addView(entry, new LinearLayout.LayoutParams(-1, -2));
-                    }
+String id = item.optString(
+        section.equals("series") ? "series_id" : "stream_id", "");
+String extension = item.optString(
+        "container_extension", section.equals("live") ? "ts" : "mp4");
+
+Button entry = button(name, () -> {
+    if (section.equals("series")) {
+        Toast.makeText(this,
+                "La riproduzione degli episodi sarà aggiunta nel prossimo passaggio.",
+                Toast.LENGTH_SHORT).show();
+        return;
+    }
+
+    String type = section.equals("live") ? "live" : "movie";
+    String url = api.buildStreamUrl(type, id, extension);
+
+    if (url.isEmpty()) {
+        Toast.makeText(this, "Indirizzo video non valido.",
+                Toast.LENGTH_SHORT).show();
+        return;
+    }
+
+    Intent intent = new Intent(this, PlayerActivity.class);
+    intent.putExtra("stream_url", url);
+    startActivity(intent);
+});
+
+entry.setAllCaps(false);
+entry.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+listLayout.addView(entry, new LinearLayout.LayoutParams(-1, -2));
                 });
             } catch (Exception e) {
                 mainHandler.post(() -> {
