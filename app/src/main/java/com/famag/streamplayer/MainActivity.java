@@ -62,10 +62,21 @@ public class MainActivity extends Activity {
 
     private LinearLayout root;
     private LinearLayout content;
+    private LinearLayout sidebar;
+    private LinearLayout pageArea;
 
     private XtreamApi api;
+
     private boolean connecting = false;
     private int generation = 0;
+
+    private String currentSection = "home";
+    private String currentCategoryId = "";
+    private String currentCategoryName = "Tutti";
+    private String currentPageTitle = "";
+
+    private JSONArray currentItems = new JSONArray();
+    private JSONArray currentCategories = new JSONArray();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -112,9 +123,9 @@ public class MainActivity extends Activity {
         Button view = new Button(this);
         view.setText(label);
         view.setTextColor(WHITE);
-        view.setTextSize(15);
+        view.setTextSize(14);
         view.setAllCaps(false);
-        view.setBackground(background(BLUE, 12));
+        view.setBackground(background(BLUE, 10));
         view.setOnClickListener(v -> action.run());
         return view;
     }
@@ -122,7 +133,7 @@ public class MainActivity extends Activity {
     private void setupRoot() {
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(14), dp(10), dp(14), dp(10));
+        root.setPadding(dp(8), dp(8), dp(8), dp(8));
         root.setBackgroundColor(BG);
         setContentView(root);
     }
@@ -268,89 +279,49 @@ public class MainActivity extends Activity {
         });
     }
 
-    private void addTile(
-            LinearLayout row,
-            String symbol,
-            String title,
-            String subtitle,
-            int color,
-            Runnable action) {
-
-        LinearLayout tile = new LinearLayout(this);
-        tile.setOrientation(LinearLayout.VERTICAL);
-        tile.setGravity(Gravity.CENTER);
-        tile.setPadding(dp(5), dp(10), dp(5), dp(10));
-        tile.setBackground(background(color, 16));
-        tile.setFocusable(true);
-        tile.setClickable(true);
-
-        TextView icon = text(symbol, 30);
-        icon.setGravity(Gravity.CENTER);
-        tile.addView(icon);
-
-        TextView name = text(title, 16);
-        name.setTypeface(null, Typeface.BOLD);
-        name.setGravity(Gravity.CENTER);
-        tile.addView(name);
-
-        TextView sub = text(subtitle, 11);
-        sub.setTextColor(MUTED);
-        sub.setGravity(Gravity.CENTER);
-        tile.addView(sub);
-
-        tile.setOnClickListener(v -> action.run());
-
-        LinearLayout.LayoutParams params =
-                new LinearLayout.LayoutParams(
-                        0, dp(135), 1);
-        params.setMargins(dp(4), dp(4), dp(4), dp(4));
-        row.addView(tile, params);
-    }
-
     private void showHome() {
+        currentSection = "home";
+        currentCategoryId = "";
+        currentCategoryName = "Tutti";
+
         generation++;
         setupRoot();
 
-        TextView logo = text("FAMAG  •  STREAM PLAYER", 22);
+        TextView logo = text("FAMAG", 30);
         logo.setTextColor(LIGHT_BLUE);
         logo.setTypeface(null, Typeface.BOLD);
         root.addView(logo);
 
-        TextView heading =
-                text("Benvenuto! Cosa vuoi guardare?", 16);
-        heading.setTextColor(MUTED);
-        root.addView(heading);
+        TextView subtitle = text("STREAM PLAYER", 14);
+        subtitle.setTextColor(MUTED);
+        root.addView(subtitle);
 
-        LinearLayout row1 = new LinearLayout(this);
-        row1.setOrientation(LinearLayout.HORIZONTAL);
+        addMenuButton("▶  LIVE TV", () -> loadSection("live"));
+        addMenuButton("▣  FILM", () -> loadSection("movies"));
+        addMenuButton("◉  SERIE TV", () -> loadSection("series"));
 
-        addTile(row1, "▶", "LIVE TV", "Canali in diretta",
-                Color.rgb(17, 71, 151),
-                () -> loadList("live"));
+        View spacer = new View(this);
+        root.addView(spacer, new LinearLayout.LayoutParams(
+                1, 0, 1));
 
-        addTile(row1, "▣", "FILM", "Film disponibili",
-                Color.rgb(22, 54, 106),
-                () -> loadList("movies"));
+        addMenuButton("⚙  ESCI", this::logout);
 
-        root.addView(row1);
+        TextView welcome =
+                text("Seleziona una sezione per iniziare.", 16);
+        welcome.setTextColor(MUTED);
+        root.addView(welcome);
+    }
 
-        LinearLayout row2 = new LinearLayout(this);
-        row2.setOrientation(LinearLayout.HORIZONTAL);
+    private void addMenuButton(String label, Runnable action) {
+        Button item = button(label, action);
+        item.setGravity(Gravity.CENTER_VERTICAL);
+        item.setPadding(dp(12), 0, dp(8), 0);
 
-        addTile(row2, "◉", "SERIE TV", "Le tue serie",
-                Color.rgb(20, 77, 126),
-                () -> loadList("series"));
-
-        addTile(row2, "⚙", "ESCI", "Disconnetti account",
-                Color.rgb(35, 45, 65),
-                this::logout);
-
-        root.addView(row2);
-
-        TextView note =
-                text("Seleziona una categoria per iniziare.", 14);
-        note.setTextColor(MUTED);
-        root.addView(note);
+        LinearLayout.LayoutParams params =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, dp(54));
+        params.setMargins(0, dp(5), 0, dp(5));
+        root.addView(item, params);
     }
 
     private void logout() {
@@ -363,73 +334,190 @@ public class MainActivity extends Activity {
         showLogin();
     }
 
-    private void showPage(String title) {
-        generation++;
-        setupRoot();
+    private void buildSidebar(String section) {
+        sidebar = new LinearLayout(this);
+        sidebar.setOrientation(LinearLayout.VERTICAL);
+        sidebar.setPadding(dp(5), dp(5), dp(5), dp(5));
+        sidebar.setBackground(background(PANEL, 12));
 
-        root.addView(button("← HOME", this::showHome));
+        TextView brand = text("FAMAG", 17);
+        brand.setTypeface(null, Typeface.BOLD);
+        brand.setTextColor(LIGHT_BLUE);
+        sidebar.addView(brand);
 
-        TextView heading = text(title, 24);
-        heading.setTextColor(LIGHT_BLUE);
-        heading.setTypeface(null, Typeface.BOLD);
-        root.addView(heading);
+        addSidebarButton("⌂ Home", this::showHome);
+        addSidebarButton("▶ Live TV", () -> loadSection("live"));
+        addSidebarButton("▣ Film", () -> loadSection("movies"));
+        addSidebarButton("◉ Serie TV", () -> loadSection("series"));
 
-        ScrollView scroll = new ScrollView(this);
+        TextView separator = text("CATEGORIE", 11);
+        separator.setTextColor(MUTED);
+        separator.setTypeface(null, Typeface.BOLD);
+        sidebar.addView(separator);
 
-        content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(0, 0, 0, dp(14));
+        ScrollView categoryScroll = new ScrollView(this);
+        LinearLayout categoryList = new LinearLayout(this);
+        categoryList.setOrientation(LinearLayout.VERTICAL);
+        categoryScroll.addView(categoryList);
 
-        scroll.addView(content);
-
-        root.addView(scroll, new LinearLayout.LayoutParams(
+        sidebar.addView(categoryScroll, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+
+        if (!section.equals("home")) {
+            addCategoryButton(categoryList, "Tutti", "",
+                    currentCategoryId.isEmpty());
+
+            for (int i = 0; i < currentCategories.length(); i++) {
+                JSONObject category =
+                        currentCategories.optJSONObject(i);
+                if (category == null) continue;
+
+                String id = category.optString("category_id", "");
+                String name = category.optString(
+                        "category_name", "Categoria");
+
+                addCategoryButton(categoryList, name, id,
+                        id.equals(currentCategoryId));
+            }
+        }
+
+        addSidebarButton("⚙ Esci", this::logout);
     }
 
-    private void loadList(String section) {
-        if (api == null) return;
+    private void addSidebarButton(String label, Runnable action) {
+        Button item = button(label, action);
+        item.setGravity(Gravity.CENTER_VERTICAL);
+        item.setTextSize(12);
+        item.setPadding(dp(6), 0, dp(3), 0);
+
+        LinearLayout.LayoutParams params =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, dp(43));
+        params.setMargins(0, dp(2), 0, dp(2));
+        sidebar.addView(item, params);
+    }
+
+    private void addCategoryButton(
+            LinearLayout list,
+            String name,
+            String id,
+            boolean selected) {
+
+        Button item = new Button(this);
+        item.setText(name);
+        item.setTextColor(WHITE);
+        item.setTextSize(11);
+        item.setAllCaps(false);
+        item.setGravity(Gravity.CENTER_VERTICAL);
+        item.setPadding(dp(4), 0, dp(2), 0);
+        item.setBackground(background(
+                selected ? BLUE : PANEL, 8));
+
+        item.setOnClickListener(v -> {
+            currentCategoryId = id;
+            currentCategoryName = name;
+            showSectionPage(currentSection);
+        });
+
+        LinearLayout.LayoutParams params =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, dp(2), 0, dp(2));
+        list.addView(item, params);
+    }
+
+    private void showSectionPage(String section) {
+        generation++;
+        int token = generation;
+
+        setupRoot();
+
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.HORIZONTAL);
+        root.addView(layout, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+
+        buildSidebar(section);
+
+        int sidebarWidth = Math.min(dp(155),
+                (int) (getResources().getDisplayMetrics().widthPixels
+                        * 0.36f));
+
+        layout.addView(sidebar, new LinearLayout.LayoutParams(
+                sidebarWidth, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        pageArea = new LinearLayout(this);
+        pageArea.setOrientation(LinearLayout.VERTICAL);
+        pageArea.setPadding(dp(7), dp(4), dp(2), dp(4));
+
+        layout.addView(pageArea, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
 
         String title = section.equals("live") ? "LIVE TV"
                 : section.equals("movies") ? "FILM" : "SERIE TV";
 
-        showPage(title);
-        int token = generation;
+        TextView heading = text(title, 21);
+        heading.setTypeface(null, Typeface.BOLD);
+        heading.setTextColor(LIGHT_BLUE);
+        pageArea.addView(heading);
 
-        content.addView(text("Caricamento contenuti...", 16));
+        TextView categoryHeading =
+                text(currentCategoryName, 14);
+        categoryHeading.setTextColor(MUTED);
+        pageArea.addView(categoryHeading);
+
+        ScrollView scroll = new ScrollView(this);
+        content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(0, 0, 0, dp(12));
+        scroll.addView(content);
+
+        pageArea.addView(scroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+
+        if (currentItems.length() > 0) {
+            renderFilteredItems(section, token);
+        } else {
+            content.addView(text("Caricamento contenuti...", 15));
+        }
+    }
+
+    private void loadSection(String section) {
+        if (api == null) return;
+
+        currentSection = section;
+        currentCategoryId = "";
+        currentCategoryName = "Tutti";
+        currentItems = new JSONArray();
+        currentCategories = new JSONArray();
+
+        showSectionPage(section);
+        int token = generation;
 
         executor.execute(() -> {
             try {
+                JSONArray categories;
                 JSONArray items;
 
                 if (section.equals("live")) {
+                    categories = api.getLiveCategories();
                     items = api.getLiveStreams();
                 } else if (section.equals("movies")) {
+                    categories = api.getVodCategories();
                     items = api.getVodStreams();
                 } else {
+                    categories = api.getSeriesCategories();
                     items = api.getSeries();
                 }
 
                 handler.post(() -> {
                     if (token != generation) return;
 
-                    content.removeAllViews();
+                    currentCategories = categories;
+                    currentItems = items;
 
-                    TextView count = text(
-                            items.length() + " contenuti disponibili", 13);
-                    count.setTextColor(MUTED);
-                    content.addView(count);
-
-                    if (items.length() == 0) {
-                        content.addView(text(
-                                "Nessun contenuto disponibile.", 16));
-                        return;
-                    }
-
-                    if (section.equals("live")) {
-                        addLiveRows(items);
-                    } else {
-                        addPosterGrid(items, section);
-                    }
+                    showSectionPage(section);
                 });
 
             } catch (Exception e) {
@@ -438,10 +526,50 @@ public class MainActivity extends Activity {
                     content.removeAllViews();
                     content.addView(text(
                             "Errore nel caricamento. Verifica il server.",
-                            16));
+                            15));
                 });
             }
         });
+    }
+
+    private void renderFilteredItems(String section, int token) {
+        content.removeAllViews();
+
+        List<JSONObject> filtered = new ArrayList<>();
+
+        for (int i = 0; i < currentItems.length(); i++) {
+            JSONObject item = currentItems.optJSONObject(i);
+            if (item == null) continue;
+
+            String categoryId = item.optString("category_id", "");
+
+            if (currentCategoryId.isEmpty()
+                    || currentCategoryId.equals(categoryId)) {
+                filtered.add(item);
+            }
+        }
+
+        TextView count = text(
+                filtered.size() + " contenuti", 12);
+        count.setTextColor(MUTED);
+        content.addView(count);
+
+        if (filtered.isEmpty()) {
+            content.addView(text(
+                    "Nessun contenuto in questa categoria.", 15));
+            return;
+        }
+
+        JSONArray result = new JSONArray();
+        for (JSONObject item : filtered) {
+            result.put(item);
+        }
+
+        if (section.equals("live")) {
+            addLiveRows(result);
+        } else {
+            addPosterGrid(result, section);
+        }
     }
 
     private String imageUrl(JSONObject item, String... keys) {
@@ -602,8 +730,24 @@ public class MainActivity extends Activity {
             return;
         }
 
-        showPage(seriesName);
+        generation++;
         int token = generation;
+        setupRoot();
+
+        root.addView(button("← INDIETRO", () ->
+                showSectionPage("series")));
+
+        TextView heading = text(seriesName, 22);
+        heading.setTextColor(LIGHT_BLUE);
+        root.addView(heading);
+
+        ScrollView scroll = new ScrollView(this);
+        content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(content);
+        root.addView(scroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+
         content.addView(text("Caricamento stagioni ed episodi...", 16));
 
         executor.execute(() -> {
@@ -612,7 +756,6 @@ public class MainActivity extends Activity {
 
                 handler.post(() -> {
                     if (token != generation) return;
-
                     content.removeAllViews();
 
                     JSONObject info = details.optJSONObject("info");
@@ -666,7 +809,6 @@ public class MainActivity extends Activity {
                             for (int i = 0; i < seasons.length(); i++) {
                                 JSONObject season =
                                         seasons.optJSONObject(i);
-
                                 if (season == null) continue;
 
                                 String number = season.optString(
@@ -691,59 +833,48 @@ public class MainActivity extends Activity {
                         seasonHeading.setTextColor(LIGHT_BLUE);
                         content.addView(seasonHeading);
 
-                        for (int i = 0;
-                                i < seasonEpisodes.length(); i++) {
-
+                        for (int i = 0; i < seasonEpisodes.length(); i++) {
                             JSONObject episode =
                                     seasonEpisodes.optJSONObject(i);
-
                             if (episode == null) continue;
 
                             String episodeId =
                                     episode.optString("id", "");
-
                             String episodeName = episode.optString(
                                     "title", "Episodio " + (i + 1));
-
                             String episodeExtension = episode.optString(
                                     "container_extension", "mp4");
-
                             String episodeNumber = episode.optString(
                                     "episode_num", "");
 
-                            String buttonTitle = episodeName;
+                            String label = episodeName;
                             if (!episodeNumber.isEmpty()
                                     && !episodeNumber.equals("null")) {
-                                buttonTitle = "E" + episodeNumber
+                                label = "E" + episodeNumber
                                         + " - " + episodeName;
                             }
 
-                            final String finalEpisodeId = episodeId;
-                            final String finalEpisodeName = episodeName;
-                            final String finalEpisodeExtension =
-                                    episodeExtension;
-                            final String finalButtonTitle = buttonTitle;
+                            final String finalId = episodeId;
+                            final String finalName = episodeName;
+                            final String finalExtension = episodeExtension;
+                            final String finalLabel = label;
 
                             Button episodeButton = button(
-                                    "▶  " + finalButtonTitle, () -> {
-                                if (finalEpisodeId.isEmpty()) {
+                                    "▶  " + finalLabel, () -> {
+                                if (finalId.isEmpty()) {
                                     Toast.makeText(this,
                                             "ID episodio non disponibile",
                                             Toast.LENGTH_SHORT).show();
                                 } else {
-                                    playStream("series",
-                                            finalEpisodeId,
-                                            finalEpisodeExtension,
-                                            finalEpisodeName);
+                                    playStream("series", finalId,
+                                            finalExtension, finalName);
                                 }
                             });
 
-                            LinearLayout.LayoutParams params =
+                            content.addView(episodeButton,
                                     new LinearLayout.LayoutParams(
                                             ViewGroup.LayoutParams.MATCH_PARENT,
-                                            ViewGroup.LayoutParams.WRAP_CONTENT);
-                            params.setMargins(0, dp(2), 0, dp(2));
-                            content.addView(episodeButton, params);
+                                            ViewGroup.LayoutParams.WRAP_CONTENT));
                         }
                     }
                 });
@@ -753,8 +884,8 @@ public class MainActivity extends Activity {
                     if (token != generation) return;
                     content.removeAllViews();
                     content.addView(text(
-                            "Errore nel caricamento della serie. "
-                                    + "Riprova più tardi.", 16));
+                            "Errore nel caricamento della serie. Riprova.",
+                            16));
                 });
             }
         });
@@ -784,6 +915,15 @@ public class MainActivity extends Activity {
         intent.putExtra("stream_url", streamUrl);
         intent.putExtra("title", title);
         startActivity(intent);
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (!currentSection.equals("home") && api != null) {
+            showSectionPage(currentSection);
+        } else {
+            super.onBackPressed();
+        }
     }
 
     @Override
