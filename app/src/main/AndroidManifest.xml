@@ -10,6 +10,10 @@
         android:usesCleartextTraffic="true">
 
         <activity
+            android:name=".PlayerActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+        <activity
             android:name=".MainActivity"
             android:exported="true">
             <intent-filter>
